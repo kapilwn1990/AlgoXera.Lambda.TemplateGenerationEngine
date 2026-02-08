@@ -1,0 +1,89 @@
+name: Deploy to AWS Lambda DEV
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: DEV
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Configure GitHub Packages
+        run: |
+          dotnet nuget add source "https://nuget.pkg.github.com/kapilwn1990/index.json" \
+            --name github \
+            --username kapilwn1990 \
+            --password ${{ secrets.GH_PACKAGE_TOKEN }} \
+            --store-password-in-clear-text
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build project
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Publish Lambda
+        run: dotnet publish --configuration Release --runtime linux-x64 --no-self-contained --output ./publish
+
+      - name: Create deployment package
+        run: |
+          cd publish
+          zip -r ../deployment.zip .
+          cd ..
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Deploy to Lambda
+        run: |
+          if aws lambda get-function --function-name templategenerationengine-dev --region us-east-1 2>/dev/null; then
+            echo "Function exists, updating code..."
+            aws lambda update-function-code \
+              --function-name templategenerationengine-dev \
+              --zip-file fileb://deployment.zip \
+              --region us-east-1
+          else
+            echo "Function does not exist, creating..."
+            aws lambda create-function \
+              --function-name templategenerationengine-dev \
+              --runtime dotnet8 \
+              --role arn:aws:iam::428021717924:role/algoxera-lambda-Dev-role \
+              --handler AlgoXera.Lambda.TemplateGenerationEngine::AlgoXera.Lambda.TemplateGenerationEngine.Function::FunctionHandler \
+              --zip-file fileb://deployment.zip \
+              --timeout 30 \
+              --memory-size 512 \
+              --region us-east-1
+          fi
+
+      - name: Update Lambda configuration
+        run: |
+          echo "Waiting for function to be ready..."
+          aws lambda wait function-updated --function-name templategenerationengine-dev --region us-east-1
+          aws lambda update-function-configuration \
+            --function-name templategenerationengine-dev \
+            --environment "Variables={GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}}" \
+            --region us-east-1
+
+      - name: Verify deployment
+        run: |
+          aws lambda get-function \
+            --function-name templategenerationengine-dev \
+            --region us-east-1

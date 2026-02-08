@@ -87,3 +87,4 @@ jobs:
           aws lambda get-function \
             --function-name templategenerationengine-dev \
             --region us-east-1
+

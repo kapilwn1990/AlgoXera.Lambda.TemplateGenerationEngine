@@ -38,3 +38,4 @@ public class IndicatorDefinition
     public bool IsActive { get; set; } = true;
 }
 
+

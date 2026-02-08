@@ -79,3 +79,4 @@ aws sqs send-message \
 - SQS Queue: `template-generation-queue`
 - DynamoDB Tables: `TEMPLATES-DEV`, `INDICATOR-DEFINITIONS-DEV`, `MESSAGES-DEV`, `CONVERSATIONS-DEV`, `NOTIFICATIONS-DEV`
 - IAM Role: `algoxera-lambda-Dev-role`
+
